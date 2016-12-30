@@ -54,11 +54,11 @@ def quivdata(Out, gr, iz=0):
     # Flows at cell centers
     U = np.concatenate((Out.Qx[:,0,iz].reshape((gr.Ny,1,1)), \
                         0.5 * (Out.Qx[:,:-1,iz].reshape((gr.Ny,gr.Nx-2,1)) +\
-                               Out.Qx[:,1:,iz].reshape((gr.Ny,gr.Nx-2,1))), \
+                               Out.Qx[:, 1:,iz].reshape((gr.Ny,gr.Nx-2,1))), \
                         Out.Qx[:,-1,iz].reshape((gr.Ny,1,1))), axis=1).reshape(shp)
-    V = np.concatenate((Out.Qy[0,:,iz].reshape((1,gr.Nx,1)), \
+    V = np.concatenate((Out.Qy[0, :,iz].reshape((1,gr.Nx,1)), \
                         0.5 * (Out.Qy[:-1,:,iz].reshape((gr.Ny-2,gr.Nx,1)) +\
-                               Out.Qy[1:,:,iz].reshape((gr.Ny-2,gr.Nx,1))), \
+                               Out.Qy[ 1:,:,iz].reshape((gr.Ny-2,gr.Nx,1))), \
                         Out.Qy[-1,:,iz].reshape((1,gr.Nx,1))), axis=0).reshape(shp)
     return X, Y, U, V
 

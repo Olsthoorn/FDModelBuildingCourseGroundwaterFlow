@@ -73,13 +73,16 @@ def isSink(Q, Qx, Qy, Qz, sinkfrac=0.75, tol=1e-4):
     return -Q * (Q<0) /(tol + Qinto) > sinkfrac
 
 
-def plot_particles(Pcl, axes=None, ugrid=False):
+def plot_particles(Pcl, axes=None, first_axis='z', ugrid=False):
     """Plots particles on current axis
 
     Parameters:
     -----------
     Pcl : named tuple with tracked particles as produced by particle_tracker
     ax  : a legal axes or None in which case a 3D plot will me made.
+    third_axis: axis perpendicular to plotting plane, so
+                'z' if x and y are to be plotted
+                'y' if x and z are to be plotted(cross section)
     ugrid : boolean, if True plot particles in normalized grid.
 
     @ TO 161115
@@ -106,10 +109,22 @@ def plot_particles(Pcl, axes=None, ugrid=False):
             plt.plot(X[ip, NL], Y[ip, NL], Z[ip, NL], 'r.' )
     elif isinstance(axes, plt.Axes):
         for ip in range(X.shape[0]):
+            if first_axis=='z':
+              xx=X
+              yy=Y
+            elif first_axis=='y':
+              xx=X
+              yy=Z
+            elif first_axis=='x':
+              xx=Y
+              yy=Z
+            else
+              print("first_axis must be one of ('z', 'y', 'x')")
+              raise InputError('',"first_axis must be one of ('z', 'y', 'x')")
             L  = Pcl.status[ip,:] > 0.
             NL = NOT(L) # first captured time index
-            plt.plot(X[ip,  :], Y[ip,  :], 'b.-')
-            plt.plot(X[ip, NL], Y[ip, NL], 'r.' )
+            plt.plot(xx[ip,  :], yy[ip,  :], 'b.-')
+            plt.plot(xx[ip, NL], yy[ip, NL], 'r.' )
     else:
         print("Axis should be a legal 2d or 3d axes not type {}"
                       .format(axes))
