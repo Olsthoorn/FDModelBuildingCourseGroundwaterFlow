@@ -11,7 +11,7 @@ Created on Fri Sep 30 04:26:57 2016
 """
 import sys
 
-myModules = '/Users/Theo/GRWMODELS/Python_projects/mfpy/modules'
+myModules = './modules/'
 
 if not myModules in sys.path:
     sys.path.insert(0, myModules)

@@ -1,10 +1,10 @@
 
 import sys
 
-myModules = '/Users/Theo/GRWMODELS/Python_projects/mfpy/modules/'
+myModules = './modules/'
 
 if not myModules in sys.path:
-    sys.path.insert(0, myModules)
+    sys.path.insert(1, myModules)
 
 
 import matplotlib.pylab as plt
@@ -118,13 +118,16 @@ def plot_particles(Pcl, axes=None, first_axis='z', ugrid=False):
             elif first_axis=='x':
               xx=Y
               yy=Z
-            else
+            else:
               print("first_axis must be one of ('z', 'y', 'x')")
               raise InputError('',"first_axis must be one of ('z', 'y', 'x')")
             L  = Pcl.status[ip,:] > 0.
             NL = NOT(L) # first captured time index
             plt.plot(xx[ip,  :], yy[ip,  :], 'b.-')
             plt.plot(xx[ip, NL], yy[ip, NL], 'r.' )
+            #print('xx=', xx[ip, :])
+            #print('yy=', yy[ip, :])
+            #print()
     else:
         print("Axis should be a legal 2d or 3d axes not type {}"
                       .format(axes))
