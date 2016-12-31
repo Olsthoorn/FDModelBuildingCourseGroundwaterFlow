@@ -73,7 +73,8 @@ def isSink(Q, Qx, Qy, Qz, sinkfrac=0.75, tol=1e-4):
     return -Q * (Q<0) /(tol + Qinto) > sinkfrac
 
 
-def plot_particles(Pcl, axes=None, first_axis='z', ugrid=False):
+def plot_particles(Pcl, axes=None, first_axis='z',
+             markers='+o*.xsdph^v<>', ugrid=False, **kwargs):
     """Plots particles on current axis
 
     Parameters:
@@ -108,26 +109,37 @@ def plot_particles(Pcl, axes=None, first_axis='z', ugrid=False):
             plt.plot(X[ip, :], Y[ip, :], Z[ip, :], 'b.-')
             plt.plot(X[ip, NL], Y[ip, NL], Z[ip, NL], 'r.' )
     elif isinstance(axes, plt.Axes):
-        for ip in range(X.shape[0]):
-            if first_axis=='z':
-              xx=X
-              yy=Y
-            elif first_axis=='y':
-              xx=X
-              yy=Z
-            elif first_axis=='x':
-              xx=Y
-              yy=Z
-            else:
-              print("first_axis must be one of ('z', 'y', 'x')")
-              raise InputError('',"first_axis must be one of ('z', 'y', 'x')")
-            L  = Pcl.status[ip,:] > 0.
-            NL = NOT(L) # first captured time index
-            plt.plot(xx[ip,  :], yy[ip,  :], 'b.-')
-            plt.plot(xx[ip, NL], yy[ip, NL], 'r.' )
-            #print('xx=', xx[ip, :])
-            #print('yy=', yy[ip, :])
-            #print()
+        if first_axis=='z':
+          xx=X
+          yy=Y
+        elif first_axis=='y':
+          xx=X
+          yy=Z
+        elif first_axis=='x':
+          xx=Y
+          yy=Z
+        else:
+          print("first_axis must be one of ('z', 'y', 'x')")
+          raise err.InputError('',"first_axis must be one of ('z', 'y', 'x')")
+
+        Nm = len(markers)
+        #pdb.set_trace()
+        plt.plot(xx.T, yy.T, 'b')
+        for it in range(Pcl.status.shape[1]):
+            L = Pcl.status[:,it]>0
+            if markers[it % Nm] != ' ':
+                plt.plot(xx[L,it], yy[L,it], marker=markers[it % Nm], **kwargs)
+
+        #Mark the end points with status <=0 (captured)
+        L  = Pcl.status[:,-1] <= 0.
+        plt.plot(xx[L,-1], yy[L, -1], 'r.' )
+
+        #for it, m in enumerate(markers):
+        #    plt.plot(xx,yy)
+
+        #print('xx=', xx[ip, :])
+        #print('yy=', yy[ip, :])
+        #print()
     else:
         print("Axis should be a legal 2d or 3d axes not type {}"
                       .format(axes))
@@ -228,7 +240,7 @@ def newPos(v0, a, Us, dt):
 
     # Cells with constant velocity
     Llin = np.logical_and( a == 0., np.abs(v0) != 0) # cells with constant v
-    Llog = AND(vUs * vUe > 0, NOT(Llin)) # cells with changing v without internal water divide
+    Llog = AND(vUs != 0, vUs != vUe, NOT(Llin)) # cells with changing v without internal water divide
 
     # Compute the output position after the minimum of te and trem (remaining time)
 
@@ -252,18 +264,26 @@ def LOCAL(up, Nx):
 
 
 def particle_tracker(gr, fdm_out, por, T=100., particles=None,
-                     markers='+o*.xsdph^v<>', retardation=1.0,
+                     markers='+o*.xsdph^v<>', verbose=True,
+                     retardation=1.0,
                      sinkfrac=0.75, tol=1e-6,
                      central_point=(0., 0., 0.)):
-    """3D particle tracker, returning (XP, YP, ZP) particle coordinates
+    """3D particle tracker, returning (XP, YP, ZP) particle coordinates.
 
     To use this function:
-        generate a 3D steady-state model, launch this function using its produced
-        arrays Q, Qx, Qy, Qz and the array por
-        If no starting values are used you must click on an existing picture and
-        the flow path will be immedidately drawn with markers at the given time points in T
+        generate a 3D steady-state model, e.g.call function `fdm3()` in module `fdm` and use its output `fdm_out` (which contains Q, Qx, Qy, Qz) and the array `por` (effective porosity) and the other parameters to track particles. T is an array of times of which the particle positions are to be stored and returned and particles is a 3-tuple with the initial particle coordinates (Xp, Yp, Zp).
+        ***Call example:**
+        Pcl = particle_tracker(gr, fdm_out, por, T=100.,
+                                    particles=(Xp, Yp, Zp))
+    ToDo:
+    -----
+        + If no starting values are used you must click on an existing picture and the flow path will be immedidately drawn with markers at the points reached at the given times in array T. Markers are used in the order as specified (or defaults).
         Repeat this for more lines. Click te right hand button to stop
-        Type fdm3path for selftest and demo
+        + Type fdm3path for selftest and demo.
+        + Add random walk.
+        + Show use of simultaneous tracking of massive numbers of particles.
+        + Implement use in axial symmetric mode.
+        @TO 161230
 
     Parameters:
     -----------
@@ -271,25 +291,25 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
         gr contains the information about the finite difference grid
         For axially symmetric models set axial=True in the call to Grid
             gr = mfgrid.Grid(xGr, yGr, zGr, axial=True)
-    Q, Qx, Qy, Qz : np.ndarray, [L3/T]
-        arrays [L3/T] output by the fintie difference model
-    por : np.ndarray, [- ]
-        effective porsities
+    fdm_out: named tuple, output of the 3D fintie difference model fdm.fdm3,
+        containing the 3D ndarrays Q, Qx, Qy, Qz : [L3/T]
+    por : np.ndarray, [- ] effective porsities
     T  : np.ndarray, [T]
-        vector of times at which pints markers are desired
-            A marker at t=0 will always be placed
-            Use negative times vor backward tracing
+        vector of times at which particle positions are desired.
+        In interactive mode, a marker is placed on successive times. See markers below.
+        A marker at t=0 will always be placed
+            Use negative times to backward.
         A single value denotes an end time and 0 is prepended.
-        In vectors T[0] is the time of the inital particles.
+        If T is a vector, then T[0] is the startubg tne time of the tracking and the first marker is placed on the starting particle position.
     markers : string, [-]
-        a listis of letters or signs denoting legal markers in matplotlib.
+        a listis of letters or stymbols denoting legal markers in matplotlib.
         These markers will be used in sequence and repeated when used up.
           e.g.   '>+o*.xsdph\^{}v<'
-    particles : ndarray
-        array of particle coodinates to start the tracking with. The shape must
+    verbose : bool, if True prints iteration progress
+    particles : a 3 tuple of ndarray denoting starting postion of particles.
+        An ndarray is also allows. Then the shape must
         be (Np, 3). If shape is (Np, 2) , then [X, Z) is assumed as for a cross section.
-    retardation : float
-        use value if applicable
+    retardation : float. Porosity is multiplied by retardation.
     sinkfrac : float
         criterion when particle are to be removed from sink cells.
         sinkfrac is the extraction as a fraction of the total inflow to the cell.
@@ -297,7 +317,7 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
         determins what is considered to be zero, use 1e-6 for instance
     central_point : is a coordinate 3-tuple (x, y, z).
         It is sometimes useful when working with wells to compute the
-        distance to this point. The computed distance is included under 'r'.
+        distance to this point. The computed distance is included in the particle output under variable 'r'.
 
     Returns:
     --------
@@ -322,14 +342,11 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
 
     Approach:
     ---------
-    The idea is that we convert the model to cubes of unit length with all axis ascending.
-    The velocities will be converted to this grid. But (we hope) that the flows can be maintained.
-    Have to figure out if and how this works. We do this in 3D. Local coordinates may be denoted
-    by u, v, w for x, y, z. This approach will allow dealing with each axis in the same way, so that
-    functions for this can be written and applied to each axis in sequence. Then we don't duplicate code
-    and, therefore, errors. Make it as pythonic as possible and as short and robust as possible.
-    If possible, this code shoul also work with massive numbers of points, so vectorize where possible.
-    This will allow simple transfer to the next chapter or even make it superfluous.
+    All computations and trackings are done in a normalized model grid. That is a grid consisting of cubes with unit sides, using relative coordinates up, vp an wp that run from 0..Nx, 0..Ny and 0..Nz. up=U+iu, where U is 0..1. and iu is integer 0..Nx-1, vp=V+iv, and wp=W+iw with W=0..1. and integer iw=0..Nz-1.
+    The velocities are converted to this grid.
+    This approach allows to treat all three axes in the same way, so that
+    functions for can be written and applied to each axis in sequence that not have to deal with the direction of the axis in the normalized grid. It also prevents duplicating code and is less error prone.
+    The code is vectorized as much as possible to allow massive numbers of points to be tracked simultaneously. This should make implementation of random walk of particles simple.
     """
 
     #import numpy as np
@@ -349,9 +366,11 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
     # conversion between coordinates see: norm2grid and grid2norm
     """Internal parameters
        ------------------
+       In the real-world grid, axes direction is x aligned with column number, while y and z run opposite with column and layer numbers. In the normalized grid, u, v and w always increase with increasing column, row and layer numbers, so that coordinates 0<=up<=Nx, 0<=vp<=Ny, and 0<=wp<=Nz for points inside the grid.
+
        Nu, Nv, Nw = gr.Nx, gr.Ny, gr.Nz
        tNext = T[it], it = current time target index
-           Cell based:
+           Cell based parameters:
            -----------
            vc_u0, vc_u1 : normalized velocities in cell in u-direction
            vc_v0, vc_v1 : in v-direction (y)
@@ -371,10 +390,10 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
            up, vp, wp   : normalized grid coordinaes: 0<up<Nu+1, 0<vp<Nv+1, 0<wp<Nw+1
            u_, v_, w_   : up[:,it], vp[:,it], wp[:,it] for convenience
            iup, ivp, iwp: grid cell of particle = np.array(np.floor(up), dtype=int) etc.
-           U, V, W      : local grid coordinates U=up-iu, V=vp-iv, V=wp-iw, all 0<U<1 etc.
-           IC : ndarray of int, cell indices for particles (where they currently are)
-           Ic : cell indices of only the considered (moving) particles, to select cell info
-           Lp : indices of moving particles in the particle array, to select particles not cells
+           U, V, W      : local grid coordinates U=up-iu, V=vp-iv, V=wp-iw, all 0<=U<=1 etc.
+           IC : ndarray with dtype=int, contains cell indices for particles (where they currently are)
+           Ic : ndarray of dtype=int, cell indices of only the considered (moving) particles, to select cell info
+           Lp : ndarray of dtype=bool, indices of moving particles in the particle array, to select particles not cells
                    lenght of Ic and Lp must alows be the same, as the same particles are targeted.
            Dte : (Np, 4) time until particle exits cell, column 4 = tNext
            dte : minumum time until particle hits any of its current cell faces
@@ -457,7 +476,7 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
 
     # check for NaNs in intput coordinates
     if any(np.isnan(Xp * Xp * Zp)):
-        print("particles coordinates may not conain NaNs, {} NaNs found".
+        print("particles coordinates may not contain NaNs, {} NaNs found".
                   format(np.sum(np.isnan(Xp *Yp *Zp))))
         raise ValueError()
 
@@ -726,11 +745,12 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
             rest = AND (NOT( gone ), tRem > 0. )
 
             if NOT (np.any( rest )):
-                """ All particles have been eliminated or arrived at\n\
-                at end of time step'
-                """
-                print("all particles arrived at time step {0}, after {1} iteratons".\
-                      format(it, iter_))
+                if verbose:
+                    """ All particles have been eliminated or arrived at\n\
+                    at end of time step'
+                    """
+                    print("all particles arrived at time step {0}, after {1} iteratons".\
+                          format(it, iter_))
                 break
             else:
                 # Update the set of current particles
