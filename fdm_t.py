@@ -30,39 +30,39 @@ def fdm3t(gr, t, kx, ky, kz, Ss, FQ, HI, IBOUND, epsilon=0.67):
     t : ndarray, shape: [Nt+1]
         times at which the heads and flows are desired including the start time,
         which is usually zero, but can have any value.
-    `kx`, `ky`, `kz` : ndarray, shape: (Ny, Nx, Nz), [L/T]
+    `kx`, `ky`, `kz` : ndarray, shape: (Nz, Ny, Nx), [L/T]
         hydraulic conductivities along the three axes, 3D arrays.
-    `Ss` : ndarray, shape: (Ny, Nx, Nz), [L-1]
+    `Ss` : ndarray, shape: (Nz, Ny, Nx), [L-1]
         specific elastic storage
-    `FQ` : ndarray, shape: (Ny, Nx, Nz), [L3/T]
+    `FQ` : ndarray, shape: (Nz, Ny, Nx), [L3/T]
         prescrived cell flows (injection positive, zero of no inflow/outflow)
-    `IH` : ndarray, shape: (Ny, Nx, Nz), [L]
+    `IH` : ndarray, shape: (Nz, Ny, Nx), [L]
         initial heads. `IH` has the prescribed heads for the cells with prescribed head.
-    `IBOUND` : ndarray, shape: (Ny, Nx, Nz) of int
+    `IBOUND` : ndarray, shape: (Nz, Ny, Nx) of int
         boundary array like in MODFLOW with values denoting
-        * IBOUND>0  the head in the corresponding cells will be computed
-        * IBOUND=0  cells are inactive, will be given value NaN
-        * IBOUND<0  coresponding cells have prescribed head
+        * IBOUND > 0  the head in the corresponding cells will be computed
+        * IBOUND = 0  cells are inactive, will be given value NaN
+        * IBOUND < 0  coresponding cells have prescribed head
     `epsilon` : float, dimension [-]
         degree of implicitness, choose value between 0.5 and 1.0
     
     outputs
     -------    
     `Out` : namedtuple containing heads and flows:
-        `Out.Phi` : ndarray, shape: (Nt+1, Ny, Nx, Nz), [L3/T] 
+        `Out.Phi` : ndarray, shape: (Nt+1, Nz, Ny, Nx), [L3/T] 
             computed heads. Inactive cells will have NaNs
             To get heads at time t[i], use Out.Phi[i]
             Out.Phi[0] = initial heads
-        `Out.Q`   : ndarray, shape: (Nt, Ny, Nx, Nz), [L3/T]
+        `Out.Q`   : ndarray, shape: (Nt, Nz, Ny, Nx), [L3/T]
             net inflow in all cells during time step, inactive cells have 0
             Q during time step i, use Out.Q[i]
-        `Out.Qs`  : ndarray, shape: (Nt, Ny, Nx, Nz), [L3/T]
+        `Out.Qs`  : ndarray, shape: (Nt, Nz, Ny, Nx), [L3/T]
             release from storage during time step.
-        `Out.Qx   : ndarray, shape: (Nt, Ny, Nx-1, Nz), [L3/T] 
+        `Out.Qx   : ndarray, shape: (Nt, Nz, Ny, Nx-1), [L3/T] 
             intercell flows in x-direction (parallel to the rows)
-        `Out.Qy`  : ndarray, shape: (Nt, Ny-1, Nx, Nz), [L3/T] 
+        `Out.Qy`  : ndarray, shape: (Nt, Nz, Ny-1, Nx), [L3/T] 
             intercell flows in y-direction (parallel to the columns)
-        `Out.Qz`  : ndarray, shape: (Nt, Ny, Nx, Nz-1), [L3/T] 
+        `Out.Qz`  : ndarray, shape: (Nt, Nz-1, Ny, Nx), [L3/T] 
             intercell flows in z-direction (vertially upward postitive)        
     
     TO 161024
@@ -78,8 +78,8 @@ def fdm3t(gr, t, kx, ky, kz, Ss, FQ, HI, IBOUND, epsilon=0.67):
                     Out.Phi[i] for the 3D heads of time `i`
                     Out.Q[i] for the 3D flows of time step `i`
                     Notice the difference between time and time step
-                    The shape of Phi is (Nt + 1,Ny, Nx, Nz)
-                    The shape of Q, Qs is (Nt, Ny, Nx, Nz)
+                    The shape of Phi is (Nt + 1,Nz, Ny, Nx)
+                    The shape of Q, Qs is (Nt, Nz, Ny, Nx)
                     For the other shapes see docstring of fdm_t                    
                     """                            
                                 
@@ -100,8 +100,8 @@ def fdm3t(gr, t, kx, ky, kz, Ss, FQ, HI, IBOUND, epsilon=0.67):
     fxhd   = (IBOUND<0).reshape(gr.Nod,)  # boolean vector denoting fixed-head cells
 
     # reshaping shorthands
-    dx = np.reshape(gr.dx, (1, gr.Nx, 1))
-    dy = np.reshape(gr.dy, (gr.Ny, 1, 1))
+    dx = np.reshape(gr.dx, (1, 1, gr.Nx))
+    dy = np.reshape(gr.dy, (1, gr.Ny, 1))
 
     # half cell flow resistances
     if not gr.axial:
@@ -113,10 +113,10 @@ def fdm3t(gr, t, kx, ky, kz, Ss, FQ, HI, IBOUND, epsilon=0.67):
         # prevent div by zero warning in next line; has not effect because x[0] is not used 
         x = gr.x.copy();  x[0] = x[0] if x[0]>0 else 0.1* x[1]
         
-        Rx1 = 1 / (2 * np.pi * kx * gr.DZ) * np.log(x[1:] /  gr.xm).reshape((1, gr.Nx, 1))
-        Rx2 = 1 / (2 * np.pi * kx * gr.DZ) * np.log(gr.xm / x[:-1]).reshape((1, gr.Nx, 1))
+        Rx1 = 1 / (2 * np.pi * kx * gr.DZ) * np.log(x[1:] /  gr.xm).reshape((1, 1, gr.Nx))
+        Rx2 = 1 / (2 * np.pi * kx * gr.DZ) * np.log(gr.xm / x[:-1]).reshape((1, 1, gr.Nx))
         Ry1 = np.inf * np.ones(gr.shape)
-        Rz1 = 0.5 * gr.DZ / (np.pi * (gr.x[1:]**2 - gr.x[:-1]**2).reshape((1, gr.Nx, 1)) * kz)
+        Rz1 = 0.5 * gr.DZ / (np.pi * (gr.x[1:]**2 - gr.x[:-1]**2).reshape((1, 1, gr.Nx)) * kz)
     
     # set flow resistance in inactive cells to infinite
     Rx1[inact.reshape(gr.shape)] = np.inf
@@ -127,20 +127,20 @@ def fdm3t(gr, t, kx, ky, kz, Ss, FQ, HI, IBOUND, epsilon=0.67):
     Rz2 = Rz1
     
     # conductances between adjacent cells
-    Cx = 1 / (Rx1[ :,1:,:] + Rx2[:,:-1,:])        
-    Cy = 1 / (Ry1[:-1,:,:] + Ry2[ 1:,:,:])
-    Cz = 1 / (Rz1[:,:,:-1] + Rz2[:,:, 1:])
+    Cx = 1 / (Rx1[  :, :,  :-1] + Rx2[:, : , 1:])        
+    Cy = 1 / (Ry1[  :, :-1,:  ] + Ry2[:, 1:, : ])
+    Cz = 1 / (Rz1[:-1, :,  :  ] + Rz2[1:, :, : ])
 
     # storage term, variable dt not included
     Cs = (Ss * gr.Volume / epsilon).ravel()
         
     # cell number of neighboring cells
-    IE = gr.NOD[:,1:,:]  # east neighbor cell numbers
-    IW = gr.NOD[:,:-1,:] # west neighbor cell numbers
-    IN = gr.NOD[:-1,:,:] # north neighbor cell numbers
-    IS = gr.NOD[1:,:,:]  # south neighbor cell numbers
-    IT = gr.NOD[:,:,:-1] # top neighbor cell numbers
-    IB = gr.NOD[:,:,1:]  # bottom neighbor cell numbers
+    IE = gr.NOD[  :, :,   1:] # east neighbor cell numbers
+    IW = gr.NOD[  :, :,  :-1] # west neighbor cell numbers
+    IN = gr.NOD[  :, :-1,  :] # north neighbor cell numbers
+    IS = gr.NOD[  :, 1:,   :] # south neighbor cell numbers
+    IT = gr.NOD[:-1, :,    :] # top neighbor cell numbers
+    IB = gr.NOD[ 1:, :,    :] # bottom neighbor cell numbers
     
     R = lambda x : x.ravel()  # generate anonymous function R(x) as shorthand for x.ravel()
     
@@ -149,18 +149,18 @@ def fdm3t(gr, t, kx, ky, kz, Ss, FQ, HI, IBOUND, epsilon=0.67):
     A = sp.csc_matrix(( np.concatenate(( R(Cx), R(Cx), R(Cy), R(Cy), R(Cz), R(Cz)) ),\
                         (np.concatenate(( R(IE), R(IW), R(IN), R(IS), R(IB), R(IT)) ),\
                          np.concatenate(( R(IW), R(IE), R(IS), R(IN), R(IT), R(IB)) ),\
-                      )),(gr.Nod,gr.Nod))
+                      )), (gr.Nod,gr.Nod))
 
-    A = -A + sp.diags( np.array(A.sum(axis=1)).ravel() ) # Change sign and add diagonal
+    A = -A + sp.diags(np.array(A.sum(axis=1))[:,0]) # Change sign and add diagonal
    
     #Initialize output arrays (= memory allocation)
     Nt = len(t)-1
     Out.Phi = np.zeros((Nt+1, gr.Nod)) # Nt+1 times
     Out.Q   = np.zeros((Nt  , gr.Nod)) # Nt time steps
     Out.Qs  = np.zeros((Nt  , gr.Nod))
-    Out.Qx  = np.zeros((Nt, gr.Ny, gr.Nx-1, gr.Nz))
-    Out.Qy  = np.zeros((Nt, gr.Ny-1, gr.Nx, gr.Nz))
-    Out.Qz  = np.zeros((Nt, gr.Ny, gr.Nx, gr.Nz-1))
+    Out.Qx  = np.zeros((Nt, gr.Nz, gr.Ny, gr.Nx-1))
+    Out.Qy  = np.zeros((Nt, gr.Nz, gr.Ny-1, gr.Nx))
+    Out.Qz  = np.zeros((Nt, gr.Nz-1, gr.Ny, gr.Nx))
     
     # reshape input arrays to vectors for use in system equation
     FQ = R(FQ);  HI = R(HI);  Cs = R(Cs)
@@ -175,7 +175,7 @@ def fdm3t(gr, t, kx, ky, kz, Ss, FQ, HI, IBOUND, epsilon=0.67):
     
     for idt, dt in enumerate(np.diff(t)):
         
-        it = idt+1 
+        it = idt + 1 
         
         # this A is not complete !!
         RHS = FQ - (A + sp.diags(Cs / dt))[:,fxhd].dot(Out.Phi[it-1][fxhd]) # Right-hand side vector
@@ -190,12 +190,12 @@ def fdm3t(gr, t, kx, ky, kz, Ss, FQ, HI, IBOUND, epsilon=0.67):
 
 
         #Flows across cell faces
-        Out.Qx[idt] =  -np.diff( Out.Phi[it].reshape(gr.shape), axis=1) * Cx
-        Out.Qy[idt] =  +np.diff( Out.Phi[it].reshape(gr.shape), axis=0) * Cy
-        Out.Qz[idt] =  +np.diff( Out.Phi[it].reshape(gr.shape), axis=2) * Cz
+        Out.Qx[idt] =  -np.diff( Out.Phi[it].reshape(gr.shape), axis=2) * Cx
+        Out.Qy[idt] =  +np.diff( Out.Phi[it].reshape(gr.shape), axis=1) * Cy
+        Out.Qz[idt] =  +np.diff( Out.Phi[it].reshape(gr.shape), axis=0) * Cz
 
         # update head to end of time step
-        Out.Phi[it] = Out.Phi[it-1] + (Out.Phi[it]-Out.Phi[it-1])/epsilon
+        Out.Phi[it] = Out.Phi[it-1] + (Out.Phi[it] - Out.Phi[it-1]) / epsilon
 
     # reshape Phi to shape of grid
     Out.Phi = Out.Phi.reshape((Nt,) + gr.shape)

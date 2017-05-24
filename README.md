@@ -3,12 +3,14 @@ Graduate coarse given at TUDelft until end 2014
 
 The course shows how a finite difference groundwater model can be built up from base in Python and how it is used.
 
-A 3D steady state FDM is built up from ground and later extended to transient.
+A 3D steady state finite difference model (FDM) is built up from ground and later extended to transient.
 The models are implemented as Python functions that can be called with a simple signature. A number of examples show how they can be used and also verifies their correctness by comparison with analytical solutions.
 
 The FDM models work for 3D as well as for axially symmetric cases. Axially symmetric cases are simulated in a grid row (x-z). One can simulationed a large number of axially-symmetric cases simultaneously, one in each row, like cross sections.
 
 The FDM grid/mesh is conveniently stored and handled by the Grid class. Only grids of block form are possible, yet their size is practially unlimited and can be adapted by making parts inactive like it is done in MODFLOW. The more cell that are inactive, the faster the model will run. The switch axial=True in the call of the grid suffices to treat model rows as separated axially symmetric models in the xz plane and the x-coordinate as radial distance to the center.
+
+In the original version, uploaded December 2016, 3D arrays were [Ny, Nx, Nz] oriented as it is the case in Matlab. In the renewed upload of May 24, 2017, the arrays are [Nx, Ny, Nx] oriented, as they are in the FDM MODFLOW of the United States Geological Survay (USGS). The reason is that this interpretation of the 3D arrays representing FDM grid data is smarteds in Python. It implies that if the head Phi is an [Nz, Ny, Nx] 3D array, Phi[i] (=Phi[i, : :]) is the a 2D array of the ith-1 layer and Phi[i][j] (=Phi[i, j, :]) is a 1D array representing the jth-1 row of that layer and, of course, Phi[i][j][k] (=Phi[i, j, k] is zero-dimension kth cell of that row, equal to Phi[i, j, k]. Likewise in transient modeling we interprete the resulting 4D arrays as [Nt, Nz, Ny, Nx] so that the Phi[m] of the transient 4D array is the entire 3D array of stress period Phi[m-1] and Phi[m, i] the head in layer i-1 of that stress period and so on. This is elegant and intuitive. Morover, for cross sections along the x-axis we can select an entire cross section of heads of a steady-state model like so: Phi[:, j, :] which is a 2D array of size [Nz, Nx] that can immediately be contoured withou any need to transpose it. A cross section along column k-1 is selected as Phi[:, :, k]. And selecting the heads of stress period m-1 of a transient model is Phi[m, :, :, k]. Again, this is a 2D array of size [Nz, Ny] that can immediately be contoured.
 
 Streamlines are derived and implemented as the stream function that is contoured, which is useful in divergence-free 3D flow. In practice this is in cross sections, where the stream function and the stream lines are extremely useful.
 

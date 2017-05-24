@@ -45,7 +45,7 @@ def fdm3(x, y, z, kx, ky, kz, FQ, HI, IBOUND):
     z = np.sort(np.array(z))[::-1] # enforce descending
     
     # as well as the number of cells along the three axes
-    SHP = Ny, Nx, Nz = len(y)-1, len(x)-1, len(z)-1
+    SHP = Nz, Ny, Nx = len(z) - 1, len(y)-1, len(x)-1
 
     Nod = np.prod(SHP)
     
@@ -61,13 +61,13 @@ def fdm3(x, y, z, kx, ky, kz, FQ, HI, IBOUND):
         raise AssertionError("shape of kz {0} differs from that of model {1}".format(kz.shape,SHP))
     
     # from this we have the width of columns, rows and layers
-    dx = np.diff(x).reshape(1,Nx,1)
-    dy = np.abs(np.diff(y).reshape(Ny,1,1)) # enforce positive
-    dz = np.abs(np.diff(z)).reshape(1,1,Nz) # enforce positive
+    dx = np.abs(np.diff(x).reshape(1, 1, Nx)) # enforce positive
+    dy = np.abs(np.diff(y).reshape(1, Ny, 1)) # enforce positive
+    dz = np.abs(np.diff(z)).reshape(Nz, 1, 1) # enforce positive
     
-    active = (IBOUND>0).reshape(Nod,)  # boolean vector denoting the active cells
+    active = (IBOUND >0).reshape(Nod,) # boolean vector denoting the active cells
     inact  = (IBOUND==0).reshape(Nod,) # boolean vector denoting inacive cells
-    fxhd   = (IBOUND<0).reshape(Nod,)  # boolean vector denoting fixed-head cells
+    fxhd   = (IBOUND <0).reshape(Nod,) # boolean vector denoting fixed-head cells
 
     # half cell flow resistances
     Rx = 0.5 * dx / (dy * dz) / kx
@@ -80,18 +80,18 @@ def fdm3(x, y, z, kx, ky, kz, FQ, HI, IBOUND):
     Rz = Rz.reshape(Nod,); Rz[inact] = np.Inf; Rz=Rz.reshape(SHP)
     
     # conductances between adjacent cells
-    Cx = 1 / (Rx[:,:-1,:] + Rx[:,1:,:])
-    Cy = 1 / (Ry[:-1,:,:] + Ry[1:,:,:])
-    Cz = 1 / (Rz[:,:,:-1] + Rz[:,:,1:])
+    Cx = 1 / (Rx[:, :, :-1] + Rx[:, :, 1:])
+    Cy = 1 / (Ry[:, :-1, :] + Ry[:, 1:, :])
+    Cz = 1 / (Rz[:-1, :, :] + Rz[1:, :, :])
     
     NOD = np.arange(Nod).reshape(SHP)
     
-    IE = NOD[:,1:,:]  # east neighbor cell numbers
-    IW = NOD[:,:-1,:] # west neighbor cell numbers
-    IN = NOD[:-1,:,:] # north neighbor cell numbers
-    IS = NOD[1:,:,:]  # south neighbor cell numbers
-    IT = NOD[:,:,:-1] # top neighbor cell numbers
-    IB = NOD[:,:,1:]  # bottom neighbor cell numbers
+    IE = NOD[:, :, 1:]  # east neighbor cell numbers
+    IW = NOD[:, :, :-1] # west neighbor cell numbers
+    IN = NOD[:, :-1, :] # north neighbor cell numbers
+    IS = NOD[:, 1:, :]  # south neighbor cell numbers
+    IT = NOD[:-1, :, :] # top neighbor cell numbers
+    IB = NOD[1:, :, :]  # bottom neighbor cell numbers
     
     R = lambda x : x.ravel()  # generate anonymous function R(x) as shorthand for x.ravel()
 
@@ -114,7 +114,7 @@ def fdm3(x, y, z, kx, ky, kz, FQ, HI, IBOUND):
     
     Phi = HI.flatten() # allocate space to store heads
     
-    Phi[active] = spsolve( (A+Adiag)[active][:,active] ,RHS[active] ) # solve heads at active locations
+    Phi[active] = spsolve( (A + Adiag)[active][:,active] ,RHS[active] ) # solve heads at active locations
     
     Phi[inact] = np.NaN # put NaN at inactive locations
     

@@ -15,8 +15,8 @@ Created on Fri Sep 30 04:26:57 2016
 
 import numpy as np
 import matplotlib.pyplot as plt
-import mfexceptions as err
-import pdb
+from matplotlib.path import Path as Polygon
+#import pdb
 
 def AND(*args):
     L = args[0]
@@ -155,9 +155,10 @@ class Grid:
             self._Nz = len(dz)
             self._Z = self._Z[0] * np.ones(self._Nz + 1)
             self._Z[1:] -= np.cumsum(dz)
-            self._Z = self._Z.reshape((1, 1, self._Nz + 1))
+            self._Z = self._Z.reshape((self._Nz + 1, 1, 1))
         elif len(z.shape)==3: # z is given as full 3D grid
-            if self._Ny != z.shape[0] or self._Nx != z.shape[1]:
+            #pdb.set_trace()
+            if self._Ny != z.shape[1] or self._Nx != z.shape[2]:
                 print("\n\
                     The number of rows and columsn of Z is ({0},{1}).\n\
                     But expected was (Ny, Nx) = (Nrow, Ncol)=({3}, {4}) !\n\
@@ -173,26 +174,26 @@ class Grid:
                         It must have (Ny=Nrows={3}, Nx=Ncol={4}).".
                         format(z.shape[0],z.shape[1],self._tol,
                                self._Ny, self._Nx))
-                raise err.InputError()
+                raise ValueError("See printed message for details")
             else:
                 self._full = True
                 self._Z = np.array(z, dtype=float)
-                self._Nz = self._Z.shape[2] - 1
+                self._Nz = self._Z.shape[0] - 1
                 # make sure Z runs downward
-                if self._Z[0,0,0]<self._Z[0,0,-1]:
-                    self._Z = self._Z[:,:,::-1]
+                if self._Z[0, 0, 0] < self._Z[-1, 0, 0]:
+                    self._Z = self._Z[::-1, :, :]
                 # guarantee min_dz
-                DZ = np.fmax(abs(np.diff(self._Z, axis=2)), self._min_dz)
-                self._Z = self._Z[:,:,0:1] * np.ones((1, 1, self._Nz + 1))
-                self._Z[:,:,1:] -= np.cumsum(DZ, axis=2)
+                DZ = np.fmax(abs(np.diff(self._Z, axis=0)), self._min_dz)
+                self._Z = self._Z[0:1, :, :] * np.ones((self._Nz + 1, 1, 1))
+                self._Z[1:, :, :] -= np.cumsum(DZ, axis=0)
         else: # illegal shape
             print("\n\
                     z.shape = {}, but expected was a 1D vector\n\
-                    or 3D array ({},{},Nz+1)".
+                    or 3D array (Nz+1, {}, {})".
                           format(z.shape, self._Ny, self._Nx))
-            raise err.InputError()
+            raise ValueError("See printed message for details.")
 
-        self._shape = (self._Ny, self._Nx, self._Nz)
+        self._shape = (self._Nz, self._Ny, self._Nx)
 
         # axial symmetry or not
         if not isinstance(self.axial, bool):
@@ -201,14 +202,14 @@ class Grid:
                 Remedy:\n\
                 use axial=True or axial=False explicitly\n\
                 when calling mfgrid.Grid class")
-            raise err.InputError()
+            raise ValueError("See printe message for details.")
 
         if not isinstance(self._min_dz, float) or self._min_dz <= 0.:
             print("\n\
                   min_dz must be a postive float.\n\
                   Remedy:\n\
                       Use min_dz=value explicitly when calling mfgrid.Grid")
-            raise err.InputError()
+            raise ValueError("See printed message for details.")
 
 
     @property
@@ -237,13 +238,13 @@ class Grid:
     @property
     def z(self):
         '''average cell top and bottom elevatons [1, 1, Nz+1]'''
-        return (self.Z).mean(axis=0).mean(axis=0)
+        return (self.Z).mean(axis=2).mean(axis=1)
 
     @property
     def Z(self):
-        '''Cell top and bottom elevation [Ny, Nx, Nz+1]'''
+        '''Cell top and bottom elevation [Nz+1, Ny, Nx]'''
         if self._full == False:
-            return self._Z * np.ones((self.Ny, self.Nx, 1))
+            return self._Z * np.ones((1, self.Ny, self.Nx))
         else:
             return self._Z.copy()# prevent ref. to original
 
@@ -255,17 +256,17 @@ class Grid:
     @property
     def Nx(self):
         '''Number of columns in the grid'''
-        return self.shape[1]
+        return self.shape[2]
 
     @property
     def Ny(self):
         '''Number of rows in the grid'''
-        return self.shape[0]
+        return self.shape[1]
 
     @property
     def Nz(self):
         '''Number of layers in the grid'''
-        return self.shape[2]
+        return self.shape[0]
 
     @property
     def Nod(self):
@@ -290,7 +291,7 @@ class Grid:
     @property
     def dz(self):
         '''vector [Nz] of average layer thicknesses'''
-        return np.abs(np.diff(self.Z, axis=2).mean(axis=0).mean(axis=0))
+        return np.abs(np.diff(self.Z, axis=0).mean(axis=2).mean(axis=1))
 
     @property
     def Dx(self):
@@ -305,20 +306,20 @@ class Grid:
     @property
     def DX(self):
         '''3D gid [Ny, Nx, Nz] of column'''
-        return np.ones(self._shape) * self.dx.reshape((1, self.Nx, 1))
+        return np.ones(self._shape) * self.dx.reshape((1, 1, self.Nx))
 
     @property
     def DY(self):
         '''3D grid [Ny, Nx, Nz] of row widths'''
-        return self.dy.reshape((self.Ny, 1, 1)) * np.ones(self._shape)
+        return self.dy.reshape((1, self.Ny, 1)) * np.ones(self._shape)
 
     @property
     def DZ(self):
         '''3D grid [Ny, Nx, Nz] of Layer thicnesses'''
         if self._full == False:
-            return np.abs(np.diff(self.Z, axis=2) * np.ones(self._shape))
+            return np.abs(np.diff(self.Z, axis=0) * np.ones(self._shape))
         else:
-            return np.abs(np.diff(self.Z, axis=2))
+            return np.abs(np.diff(self.Z, axis=0))
 
     @property
     def Area(self):
@@ -338,7 +339,7 @@ class Grid:
     def Volume(self):
         '''Volume of cells as a 3D grid [Ny, Nx, Nz'''
         if self.axial:
-            return self.Area[:,:,np.newaxis] * self.DZ
+            return self.Area[np.newaxis, :, :] * self.DZ
         else:
             return self.DX * self.DY * self.DZ
 
@@ -375,21 +376,21 @@ class Grid:
 
     @property
     def XM(self):
-        '''Column center coordinates as a 3D grid [Ny, Nx, Nz]'''
-        return np.ones(self.shape) * self.xm.reshape((1, self.Nx, 1))
+        '''Column center coordinates as a 3D grid [Nz, Ny, Nx]'''
+        return np.ones(self.shape) * self.xm.reshape((1, 1, self.Nx))
 
     @property
     def YM(self):
-        '''Row center coordinates as a 3D grid [Ny, Nx, Nz]'''
-        return self.ym.reshape((self.Ny, 1, 1)) * np.ones(self.shape)
+        '''Row center coordinates as a 3D grid [Nz, Ny, Nx]'''
+        return self.ym.reshape((1, self.Ny, 1)) * np.ones(self.shape)
 
     @property
     def ZM(self):
-        '''Cell center coordinates as a 3D grid [Ny, Nx, Nz]'''
+        '''Cell center coordinates as a 3D grid [Nz, Ny, Nx]'''
         if self._full == False:
-            return self.zm * np.ones(self._shape)
+            return self.zm.reshape(self.Nz, 1, 1) * np.ones(self._shape)
         else:
-            return 0.5 * (self._Z[:,:,:-1] + self._Z[:,:,1:])
+            return 0.5 * (self._Z[:-1, :, :] + self._Z[1:, :, :])
 
     @property
     def xc(self):
@@ -437,8 +438,8 @@ class Grid:
         Convenience property for contouring
         '''
         Zc = self.ZM
-        Zc[:,:, 0] = self._Z[:,:, 0]
-        Zc[:,:,-1] = self._Z[:,:,-1]
+        Zc[ 0, :, :] = self._Z[ 0, :, :]
+        Zc[-1, :, :] = self._Z[-1, :, :]
         return Zc
 
     @property
@@ -455,7 +456,8 @@ class Grid:
         if self._full == False:
             return self._Z.ravel()
         else:
-            return (0.5 * (self._Z[:,:-1,:] + self._Z[:,1:,:])).mean(axis=0).mean(axis=0)
+            return (0.5 * (self._Z[:, :, :-1] + self._Z[:, :, 1:])).\
+                        mean(axis=1).mean(axis=1)
 
     @property
     def Xp(self):
@@ -470,7 +472,7 @@ class Grid:
         except first and last as 2D vertical grid.
         Convenience property for plotting stream lines
         '''
-        return (0.5 * (self.Z[row,:-1,:] + self.Z[row,1:,:])).T
+        return (0.5 * (self.Z[:, row, :-1] + self.Z[:, row, 1:]))
 
     @property
     def ZP(self):
@@ -478,35 +480,35 @@ class Grid:
         except first and last as 2D vertical grid.
         Convenience property for plotting stream lines
         '''
-        return self.Z[:,1:-1,:]
+        return self.Z[:, :, 1:-1]
 
     @property
     def zT(self):
         '''ZT elevation of the top of the cells as a 3D grid [Ny, Nx, Nz]'''
-        return self.ZT.mean(axis=0).mean(axis=0)
+        return self.ZT.mean(axis=-1).mean(axis=-1)
 
     @property
     def zB(self):
         '''ZT elevation of the top of the cells as a 3D grid [Ny, Nx, Nz]'''
-        return self.ZB.mean(axis=0).mean(axis=0)
+        return self.ZB.mean(axis=-1).mean(axis=-1)
 
     @property
     def ZT(self,row=0):
         '''ZT elevation of the top of the cells as a 3D grid [Ny, Nx, Nz]'''
-        return self.Z[:,:,:-1]
+        return self.Z[:-1, :, :]
 
     @property
     def ZB(self,row=0):
         '''ZT elevation of the bottom of the cells as a 3D grid [Ny, Nx, Nz]'''
-        return self.Z[:,:,1:]
+        return self.Z[1:, :, :]
 
     @property
     def Zgr(self):
         '''Returns Z array of all grid points.
 
-        This array has shape (Ny+1, Nx+1, Nz+1) instead of (Ny, Nx, Nz + 1)
+        This array has shape (Nz+1, Ny+1, Nx+1) instead of (Nz+1, Ny, Nx)
         of the Z array. The elevation of the internal grid points is computed
-        as the aveage of that of the 4 surrounding cells given in Z.
+        as the average of that of the 4 surrounding cells given in Z.
 
         See also plot_grid3d where it is used to plot a 3D wire frame of the
         grid.
@@ -514,28 +516,28 @@ class Grid:
         Notice: Zgr is not stored to save memory; it is always computed
         from Z when it is used.
         '''
-        shape = (self.Ny + 1, self.Nx + 1, self.Nz + 1)
+        shape = (self.Nz + 1, self.Ny + 1, self.Nx + 1)
         Zgr = np.zeros(shape)
 
-        Zgr[   0,  0, :] = self.Z[ 0,  0, :]
-        Zgr[  -1,  0, :] = self.Z[-1,  0, :]
-        Zgr[   0, -1, :] = self.Z[ 0, -1, :]
-        Zgr[  -1, -1, :] = self.Z[-1, -1, :]
-        Zgr[ 0 ,1:-1, :] = 0.5 * (self.Z[ 0, 1:, :] + self.Z[ 0, :-1, :])
-        Zgr[-1 ,1:-1, :] = 0.5 * (self.Z[-1, 1:, :] + self.Z[-1, :-1, :])
-        Zgr[1:-1,  0, :] = 0.5 * (self.Z[1:,  0, :] + self.Z[:-1,  0, :])
-        Zgr[1:-1, -1, :] = 0.5 * (self.Z[1:, -1, :] + self.Z[:-1, -1, :])
-        Zgr[1:-1, 1:-1, :] = 0.25 * (
-            self.Z[:-1,  1:, :] +
-            self.Z[ 1:,  1:, :] +
-            self.Z[:-1, :-1, :] +
-            self.Z[ 1:, :-1, :]
+        Zgr[  :,    0,  0] = self.Z[ :,  0,  0]
+        Zgr[  :,   -1,  0] = self.Z[ :, -1,  0]
+        Zgr[  :,    0, -1] = self.Z[ :,  0, -1]
+        Zgr[  :,   -1, -1] = self.Z[ :, -1, -1]
+        Zgr[  :,  0, 1:-1] = 0.5 * (self.Z[:,  0, 1:] + self.Z[:,  0, :-1])
+        Zgr[  :, -1, 1:-1] = 0.5 * (self.Z[:, -1, 1:] + self.Z[:, -1, :-1])
+        Zgr[  :, 1:-1,  0] = 0.5 * (self.Z[:, 1:,  0] + self.Z[:, :-1,  0])
+        Zgr[  :, 1:-1, -1] = 0.5 * (self.Z[:, 1:, -1] + self.Z[:, :-1, -1])
+        Zgr[:, 1:-1, 1:-1] = 0.25 * (
+            self.Z[:, :-1,  1:] +
+            self.Z[:,  1:,  1:] +
+            self.Z[:, :-1, :-1] +
+            self.Z[:,  1:, :-1]
             )
         return Zgr
 
     @property
     def ixyz_corners(self):
-        """Returns the indices of all cornersof the grid in iy,ix,iz order"""
+        """Returns the indices of all corners of the grid in ix, iy, ix order"""
         idx = [0, -1]
         idy = [0, -1]
         idz = [0, -1]
@@ -543,8 +545,8 @@ class Grid:
         for ix in range(2):
             for iy in range(2):
                 for iz in range(2):
-                    k = 4 * ix + 2 * iy + iz
-                    RCL[k] = np.array([idy[iy], idx[ix], idz[iz]])
+                    k = 4 * iz + 2 * iy + ix
+                    RCL[k] = np.array([idz[iz], idy[iy], idx[ix]])
         return RCL # row col lay
 
 
@@ -578,7 +580,7 @@ class Grid:
         Notice: all three inputs are required because z varies per (ix,iy)
         It may be simplified when gr.full = False (uniform layers)
 
-        The indices always resultin in values beteen 0 and the number of cells
+        The indices always resulting in values beteen 0 and the number of cells
         in the respective row, column and layer minus 1. These are legal
         indices. To remove points outside the model, fiter them on their
         coordinates.
@@ -610,9 +612,9 @@ class Grid:
         zp = np.array(zp, ndmin=1, dtype=float)
 
         if not (np.all(xp.shape == yp.shape) and np.all(xp.shape == zp.shape)):
-            print("Shaes of xp={}, yp={} and zp={} must match".\
+            print("Shapes of xp={}, yp={} and zp={} must match".\
                   format(xp.shape, yp.shape, zp.shape))
-            raise err.InputError()
+            raise ValueError("shapes don't match")
 
         ix = self.ix(xp)
         iy = self.iy(yp)
@@ -629,7 +631,7 @@ class Grid:
         else:
             for i in range(len(zp)):
                 if L[i] == True:
-                    z = self.Z[iy[i], ix[i], :]
+                    z = self.Z[:, iy[i], ix[i]]
                     if AND(zp[i] <= z[0], zp[i] >= z[-1]):
                         iz[i] = np.array( np.interp( -zp[i], -z,\
                             np.arange(self.Nz + 1),\
@@ -643,7 +645,7 @@ class Grid:
             return iy, ix, iz
         else:
             print("Use 'RCL', 'LRC' or 'RCL' for order.")
-            raise err.InputError()
+            raise ValueError("Unrecognied input, use RCL, LRC or RCL")
 
 
     def norm_grid(self):
@@ -662,7 +664,7 @@ class Grid:
         if not (np.all(ix.shape == iy.shape) or np.all(ix.shape == iz.shape)):
             print("The shapes of ix={}, iy={} and iz={} must be the same".\
                   format(ix.shape, iy.shape, iz.shape))
-            raise ValueError()
+            raise ValueError("Shapes don't match.")
 
         Iglob = np.zeros(ix.shape, dtype=int) + intNaN
 
@@ -670,7 +672,7 @@ class Grid:
                 iy >= 0, iy <= self.Ny,
                 iz >= 0, iz <= self.Nx)
 
-        Iglob[L] = iy[L] * self.Nx * self.Nz + ix[L] * self.Nz + iz[L]
+        Iglob[L] = iz[L] * self.Nx * self.Ny + iy[L] * self.Nx + ix[L]
         return   Iglob
 
 
@@ -687,7 +689,7 @@ class Grid:
         if not (np.all(xp.shape == yp.shape) and np.all(xp.shape == zp.shape)):
             print("shape of xp={}, yp{} and zp{} must be equal.".\
                   format(xp.shape, yp.shape, zp.shape))
-            raise ValueError()
+            raise ValueError("Sahpes don't match")
 
         I = self.inside(xp, yp, zp)
         ix = np.ones(xp.shape, dtype=int) * intNaN
@@ -746,9 +748,9 @@ class Grid:
         zp = np.array(zp, ndmin=1, dtype=float).ravel()
 
         if not ( np.all(xp.shape == yp.shape) and np.all(xp.shape == zp.shape) ):
-            print("Shaes of xp={}, yp={} and zp{} must match".\
+            print("Shapes of xp={}, yp={} and zp{} must match".\
                   format(xp.shape, yp.shape, zp.shape))
-            raise err.InputError()
+            raise ValueError("Shapes don't match.")
 
         wp = self.wp(xp, yp, zp)
         iw = np.fmin( np.array(wp, dtype=int), self.Nz - 1)
@@ -789,9 +791,9 @@ class Grid:
         zp = np.array(zp, ndmin=1, dtype=float).ravel()
 
         if not (np.all(xp.shape == yp.shape) and np.all(xp.shape == zp.shape)):
-            print("Shaes of xp={}, yp={} and zp{} must match".\
+            print("Shapes of xp={}, yp={} and zp{} must match".\
                   format(xp.shape, yp.shape, zp.shape))
-            raise err.InputError()
+            raise ValueError("Shapes don't match.")
 
         iu = self.ix(xp) # always between 0 and Nx - 1
         iv = self.iy(yp) # always between 0 and Nz - 1
@@ -807,7 +809,7 @@ class Grid:
         else:
             for i in range(len(L)):
                 if L[i] == True:
-                    wp[i] = np.interp( -zp[i], -self.Z[iv[i], iu[i], :],\
+                    wp[i] = np.interp( -zp[i], -self.Z[:, iv[i], iu[i]],\
                         np.arange(self.Nz+1) ,\
                             left=left, right=right)
         return wp # always between 0 and Nz
@@ -841,7 +843,7 @@ class Grid:
         if not (np.all(xp.shape == yp.shape) and np.all(xp.shape == zp.shape)):
             print("xp.shape={} and yp.shape={} and or zp.shape={} do not match.".\
                   format(xp.shape, yp.shape, zp.shape))
-            raise err.InputError()
+            raise ValueError("Shapes don't match.")
 
         up = self.up(xp) # always between 0 and Nx
         vp = self.vp(yp) # always between 0 and Ny
@@ -876,7 +878,7 @@ class Grid:
         if not (np.all(up.shape == vp.shape) and np.all(up.shape==wp.shape)):
             print("up.shape={} and vp.shape={} and or wp.shape={} do not match".\
                   format(up.shape, vp.shape, wp.shape))
-            raise err.InputError()
+            raise ValueError("Shapes don't match.")
 
         U, iu = LOCAL(up, self.Nx)
         V, iv = LOCAL(vp, self.Ny)
@@ -897,13 +899,13 @@ class Grid:
         else:
             for i in range(len(iw)):
                 if L[i]==True:
-                    zp[i] = self.Z[iv[i],iu[i], iw[i]] - W[i] *\
-                             self.DZ[iv[i], iu[i], iw[i]]
+                    zp[i] = self.Z[iw[i], iv[i], iu[i]] - W[i] *\
+                             self.DZ[iw[i], iv[i], iu[i]]
         return xp, yp, zp
 
 
     def inside(self, xp, yp, zp):
-        """Returns logical array tellinng which of the points are inside the grid.
+        """Returns logical array telling which of the points are inside the grid.
         xp, yp and zp must be ndarrays of equal shape of type
 
         """
@@ -930,7 +932,7 @@ class Grid:
         else:
             print("axes must be a valid 2D or 3D axis not type {}".\
                   format(type(axes)))
-            raise ValueError()
+            raise ValueError("Incorrect axis type.")
         return axes
 
 
@@ -975,7 +977,7 @@ class Grid:
                 plt.plot([0,self.Nx], [v, v], color[1], **kwargs)
         else:
             print("axes must be of type Axes or Axes3D not {}".format(type(axes)))
-            raise ValueError()
+            raise ValueError("Incorrect axis type.")
         return axes
 
 
@@ -991,13 +993,13 @@ class Grid:
         # to plot stair case when z is not uniform
         x = np.hstack((self.x.T, self.x.T)).ravel()
         for iz in range(self.Nz+1):
-            z = np.hstack((self._Z[row,:,iz].T, self._Z[row,:,iz].T)).ravel()
+            z = np.hstack((self._Z[iz, row, :].T, self._Z[iz, row, :].T)).ravel()
             plt.plot(x, z, color)
 
-        zt = np.hstack((self._Z[row,:,0].T, self._Z[row,:,0].T)).ravel()
-        zb = np.hstack((self._Z[row,:,-1].T, self._Z[row,:,-1].T)).ravel()
+        zt = np.hstack((self._Z[ 0, row, :].T, self._Z[ 0, row, :].T)).ravel()
+        zb = np.hstack((self._Z[-1, row, :].T, self._Z[-1, row, :].T)).ravel()
         for ix in range(2 * (self.Nx+1)):
-            plt.plot([x[ix],x[ix]], [zt[ix],zb[ix]], color)
+            plt.plot([x[ix], x[ix]], [zt[ix], zb[ix]], color)
         return axes
 
 
@@ -1041,18 +1043,18 @@ class Grid:
         else:
             clr = color[0:2] if len(color)>3 else color + (3 - len(color)) * color[-1]
         Zgr = self.Zgr
-        for iz in range(self.Nz+1):
+        for iz in range(self.Nz + 1):
             for ix in range(self.Nx + 1):
                 x = self.x[ix] * np.ones(self.Ny + 1, dtype=int)
-                plt.plot(x, self.y, Zgr[:,ix,iz], clr[0], **kwargs)
+                plt.plot(x, self.y, Zgr[iz, :, ix], clr[0], **kwargs)
             for iy in range(self.Ny + 1):
                 y = self.y[iy] * np.ones(self.Nx + 1, dtype=int)
-                plt.plot(self.x, y, Zgr[iy,:,iz], clr[1], **kwargs)
+                plt.plot(self.x, y, Zgr[iz, iy, :], clr[1], **kwargs)
         for ix in range(self.Nx + 1):
             x = self.x[ix] * np.ones(self.Nz + 1)
             for iy in range(self.Ny + 1):
                 y = self.y[iy] * np.ones(self.Nz + 1)
-                plt.plot(x, y, Zgr[iy, ix, :], clr[2], **kwargs)
+                plt.plot(x, y, Zgr[:, iy, ix], clr[2], **kwargs)
 
 
     def const(self, u):
@@ -1071,18 +1073,18 @@ class Grid:
         if isinstance(u, (float, int)):
             return u * np.ones(self._shape)
         elif isinstance(u, np.ndarray):
-            if len(u.ravel()) == self._shape[-1]:
-                u = u.reshape((1, 1, self._Nz))
+            if len(u.ravel()) == self._shape[0]:
+                u = u.reshape((self._Nz, 1, 1))
                 return u * np.ones(self._shape)
             else:
-                raise err.InputError("", "Len of inut array not equal to gr.Nz")
+                raise ValueError("Len of input array not equal to gr.Nz")
         elif isinstance(u, list):
-            if len(u) == self._shape[-1]:
-                u = np.array(u).reshape((1, 1, self._Nz))
+            if len(u) == self._shape[0]:
+                u = np.array(u).reshape((self._Nz, 1, 1))
                 return u * np.ones(self._shape)
-            raise err.InputError("", "len input list not equal to gr.Nz")
+            raise ValueError("len of input list must equal gr.Nz")
         else:
-            raise err.InputError("", "Argument must be scalar or array of length gr.Nz")
+            raise ValueError("Argument must be scalar or array of length gr.Nz")
 
 
     def quivdata(self, Out, iz=0):
@@ -1104,14 +1106,14 @@ class Grid:
         X, Y = np.meshgrid(self.xm, self.ym) # coordinates of cell centers
 
         # Flows at cell centers
-        U = np.concatenate((Out.Qx[:,0,iz].reshape((Ny,1,1)), \
-                            0.5 * (Out.Qx[:,:-1,iz].reshape((Ny,Nx-2,1)) +\
-                                   Out.Qx[:,1:,iz].reshape((Ny,Nx-2,1))), \
-                            Out.Qx[:,-1,iz].reshape((Ny,1,1))), axis=1).reshape((Ny,Nx))
-        V = np.concatenate((Out.Qy[0,:,iz].reshape((1,Nx,1)), \
-                            0.5 * (Out.Qy[:-1,:,iz].reshape((Ny-2,Nx,1)) +\
-                                   Out.Qy[1:,:,iz].reshape((Ny-2,Nx,1))), \
-                            Out.Qy[-1,:,iz].reshape((1,Nx,1))), axis=0).reshape((Ny,Nx))
+        U = np.concatenate((Out.Qx[iz, :, 0].reshape((1, Ny, 1)), \
+                            0.5 * (Out.Qx[iz, :, :-1].reshape((1, Ny, Nx-2)) +\
+                                   Out.Qx[iz, :, 1: ].reshape((1, Ny, Nx-2))), \
+                            Out.Qx[iz, :, -1].reshape((1, Ny, 1))), axis=2).reshape((Ny,Nx))
+        V = np.concatenate((Out.Qy[iz, 0, : ].reshape((1, 1, Nx)), \
+                            0.5 * (Out.Qy[iz, :-1, :].reshape((1, Ny-2, Nx)) +\
+                                   Out.Qy[iz, 1:,  :].reshape((1, Ny-2, Nx))), \
+                            Out.Qy[iz, -1, :].reshape((1, 1, Nx))), axis=1).reshape((Ny,Nx))
         return X, Y, U, V
 
 
@@ -1132,7 +1134,22 @@ class Grid:
             #L = np.logical_and( np.logical_and(Lx, Ly), Lz)
         return np.logical_and( np.logical_and(Lx, Ly), Lz)
 
+    def inpoly(self, pgcoords, row=None):
+        """Returns bool array [Ny, Nx] telling which grid points are inside polygon
+            parameters:
+            -----------
+            pgcoords: like [(0, 1),(2, 3), ...] polygon coordinates
+            row: if None, grid is in the xy plane
+                if int, then grid is cross section at row
+                and pgcoords are interpreted as x,z
 
+        """
+        if row is None:
+            return inpoly(self.xm, self.ym, pgcoords)
+        else:
+            Y = self.ZM[row, :, :].T
+            X = self.XM[row, :, :].T
+            return inpoly(X, Y, pgcoords)
 
 def sinspace(x1, x2, N=25, a1=0, a2=np.pi/2):
     """Return N points between x1 and x2, spaced according to sin betwwn a1 and a2.
@@ -1151,6 +1168,33 @@ def sinspace(x1, x2, N=25, a1=0, a2=np.pi/2):
     x = x1 + np.zeros(a.shape)   # initialize x wih x1
     x[1:] = x1 + np.cumsum(dx)   # fill x[1:]
     return x
+
+print('def inpoly(...)')
+
+def inpoly(x, y, pgcoords):
+    """Returns bool array [Ny, Nx] telling which grid points are inside polygon
+
+    """
+    try:
+        isinstance(pgcoords,(list, tuple, np.ndarray))
+        len(pgcoords[0])==2
+        pgon = Polygon(pgcoords)
+    except:
+        print('pgcoords must be like [(0, 0), (1, 0), ..] or\n'
+            +'an np.ndarray of shape [Np, 2]')
+        raise TypeError("Can't create polygon, pgcoords error")
+
+    try:
+        x = np.array(x, dtype=float)
+        y = np.array(y, dtype=float)
+        x.shape == y.shape
+    except:
+        raise TypeError("x and y are not np.ndarrays with same shape.")
+
+    if len(x.shape)==1:
+        X, Y = np.meshgrid(x, y)
+    xy = np.vstack((X.ravel(), Y.ravel())).T
+    return pgon.contains_points(xy).reshape(X.shape)
 
 
 import unittest
@@ -1212,6 +1256,24 @@ class TestGridMethods(unittest.TestCase):
         for i in range(gr.Nx+1):
             print( ('{:10.3g}'*2).format(np.round(gr.x[i], digits), np.round(b[i], digits) ))
         self.assertTrue(np.all(np.round(gr.x,digits) == np.round(b,digits)))
+
+    def test_inpoly(self):
+        x = np.linspace(0., 100, 101)
+        y = np.linspace(100, 0., 101)
+        pgcoords = [(30, 0), (80, 50), (10, 80)]
+
+        # individual inpoly function
+        plt.spy(self.inpoly(x, y, pgcoords))
+        plt.show()
+
+        z = np.array([1, 0])
+        gr = self.Grid(x, y, z)
+
+        # grid_method inpoly
+        plt.spy(gr.inpoly(pgcoords))
+        plt.show()
+        return True
+
 
 if __name__ == '__main__':
     unittest.main()

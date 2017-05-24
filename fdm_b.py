@@ -42,17 +42,17 @@ def quivdata(Out, x, y, z=None, iz=0):
 
     Returns
     -------
-    `Xm` : ndarray, shape: (Ny, Nx, Nz), [L]
+    `Xm` : ndarray, shape: (Nz, Ny, Nx), [L]
         x-coordinates of cell centers
-    `Ym` : ndarray, shape: (Ny, Nx, Nz), [L]
+    `Ym` : ndarray, shape: (Nz, Ny, Nx), [L]
         y-coodinates of cell centers
-    `ZM` : ndarray, shape: (Ny, Nx, Nz), [L]
+    `ZM` : ndarray, shape: (Nz, Ny, Nx), [L]
         `z`-coordinates at cell centers
-    `U` : ndarray, shape: (Ny, Nx, Nz), [L3/d]
+    `U` : ndarray, shape: (Nz, Ny, Nx), [L3/d]
         Flow in `x`-direction at cell centers
-    `V` : ndarray, shape: (Ny, Nx, Nz), [L3/T]
+    `V` : ndarray, shape: (Nz, Ny, Nx), [L3/T]
         Flow in `y`-direction at cell centers
-    `W` : ndarray, shape: (Ny, Nx, Nz), [L3/T]
+    `W` : ndarray, shape: (Nz, Ny, Nx), [L3/T]
         Flow in `z`-direction at cell centers.
     
     """
@@ -65,14 +65,14 @@ def quivdata(Out, x, y, z=None, iz=0):
     X, Y = np.meshgrid(xm, ym) # coordinates of cell centers
     
     # Flows at cell centers
-    U = np.concatenate((Out.Qx[:,0,iz].reshape((Ny,1,1)), \
-                        0.5 * (Out.Qx[:,:-1,iz].reshape((Ny,Nx-2,1)) +\
-                               Out.Qx[:,1:,iz].reshape((Ny,Nx-2,1))), \
-                        Out.Qx[:,-1,iz].reshape((Ny,1,1))), axis=1).reshape((Ny,Nx))
-    V = np.concatenate((Out.Qy[0,:,iz].reshape((1,Nx,1)), \
-                        0.5 * (Out.Qy[:-1,:,iz].reshape((Ny-2,Nx,1)) +\
-                               Out.Qy[1:,:,iz].reshape((Ny-2,Nx,1))), \
-                        Out.Qy[-1,:,iz].reshape((1,Nx,1))), axis=0).reshape((Ny,Nx))
+    U = np.concatenate((Out.Qx[iz, :, 0].reshape((1, Ny, 1)), \
+                        0.5 * (Out.Qx[iz, :, :-1].reshape((1, Ny, Nx-2)) +\
+                               Out.Qx[iz, :, 1: ].reshape((1, Ny, Nx-2))), \
+                        Out.Qx[iz, :, -1].reshape((1, Ny, 1))), axis=2).reshape((Ny,Nx))
+    V = np.concatenate((Out.Qy[iz, 0, :].reshape((1, 1, Nx)), \
+                        0.5 * (Out.Qy[iz, :-1, :].reshape((1, Ny-2, Nx)) +\
+                               Out.Qy[iz, 1:,  :].reshape((1, Ny-2, Nx))), \
+                        Out.Qy[iz, -1, :].reshape((1, 1, Nx))), axis=1).reshape((Ny,Nx))
     return X, Y, U, V
 
 
@@ -139,7 +139,7 @@ def fdm3(x, y, z, kx, ky, kz, FQ, HI, IBOUND):
     z = unique(z)[::-1]  # unique and descending
         
     # as well as the number of cells along the three axes
-    SHP = Ny, Nx, Nz = len(y)-1, len(x)-1, len(z)-1
+    SHP = Nz, Ny, Nx = len(z)-1, len(y)-1, len(x)-1
     
     Nod = np.prod(SHP)
  
@@ -155,9 +155,9 @@ def fdm3(x, y, z, kx, ky, kz, FQ, HI, IBOUND):
         raise AssertionError("shape of kz {0} differs from that of model {1}".format(kz.shape,SHP))
         
     # from this we have the width of columns, rows and layers
-    dx = np.abs(np.diff(x)).reshape(1, Nx, 1)
-    dy = np.abs(np.diff(y)).reshape(Ny, 1, 1)
-    dz = np.abs(np.diff(z)).reshape(1, 1, Nz)
+    dx = np.abs(np.diff(x)).reshape(1, 1, Nx)
+    dy = np.abs(np.diff(y)).reshape(1, Ny, 1)
+    dz = np.abs(np.diff(z)).reshape(Nz, 1, 1)
     
     active = (IBOUND>0).reshape(Nod,)  # boolean vector denoting the active cells
     inact  = (IBOUND==0).reshape(Nod,) # boolean vector denoting inacive cells
@@ -174,18 +174,18 @@ def fdm3(x, y, z, kx, ky, kz, FQ, HI, IBOUND):
     Rz = Rz.reshape(Nod,); Rz[inact] = np.Inf; Rz=Rz.reshape(SHP)
     
     # conductances between adjacent cells
-    Cx = 1 / (Rx[:,:-1,:] + Rx[:,1:,:])
-    Cy = 1 / (Ry[:-1,:,:] + Ry[1:,:,:])
-    Cz = 1 / (Rz[:,:,:-1] + Rz[:,:,1:])
+    Cx = 1 / (Rx[:, :, :-1] + Rx[:, :, 1:])
+    Cy = 1 / (Ry[:, :-1, :] + Ry[:, 1:, :])
+    Cz = 1 / (Rz[:-1, :, :] + Rz[1:, :, :])
     
     NOD = np.arange(Nod).reshape(SHP)
     
-    IE = NOD[:,1:,:]  # east neighbor cell numbers
-    IW = NOD[:,:-1,:] # west neighbor cell numbers
-    IN = NOD[:-1,:,:] # north neighbor cell numbers
-    IS = NOD[1:,:,:]  # south neighbor cell numbers
-    IT = NOD[:,:,:-1] # top neighbor cell numbers
-    IB = NOD[:,:,1:]  # bottom neighbor cell numbers
+    IE = NOD[:, :, 1:]  # east neighbor cell numbers
+    IW = NOD[:, :, :-1] # west neighbor cell numbers
+    IN = NOD[:, :-1, :] # north neighbor cell numbers
+    IS = NOD[:, 1:, :]  # south neighbor cell numbers
+    IT = NOD[:-1, :, :] # top neighbor cell numbers
+    IB = NOD[1:, :, :]  # bottom neighbor cell numbers
     
     R = lambda x : x.ravel()  # generate anonymous function R(x) as shorthand for x.ravel()
 
@@ -221,8 +221,8 @@ def fdm3(x, y, z, kx, ky, kz, FQ, HI, IBOUND):
     Out.Phi = Out.Phi.reshape(SHP)
     
     #Flows across cell faces
-    Out.Qx =  -np.diff( Out.Phi, axis=1) * Cx
-    Out.Qy =  +np.diff( Out.Phi, axis=0) * Cy
-    Out.Qz =  +np.diff( Out.Phi, axis=2) * Cz
+    Out.Qx =  -np.diff( Out.Phi, axis=2) * Cx
+    Out.Qy =  +np.diff( Out.Phi, axis=1) * Cy
+    Out.Qz =  +np.diff( Out.Phi, axis=0) * Cz
     
     return Out # all outputs in a named tuple for easy access

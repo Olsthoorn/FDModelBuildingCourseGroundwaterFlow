@@ -22,9 +22,8 @@ import scipy.sparse.linalg as la
 import scipy.special
 from collections import namedtuple
 import matplotlib.pylab as plt
-import mfexceptions as err
 import mfgrid
-import pdb
+#import pdb
 
 def quivdata(Out, x, y, iz=0):
     """Returns vector data for plotting velocity vectors.
@@ -99,9 +98,9 @@ def psi(Qx, row=0):
     The stream function will be zero along the bottom of the cross section.
 
     """
-    Psi = Qx[row,:,:].T # Copy the section for which the stream line is to be computed.
+    Psi = Qx[:, row, :] # Copy the section for which the stream line is to be computed.
                         # and transpose to get the [z,x] orientation in 2D
-    Psi = Psi[::-1,:].cumsum(axis=0)[::-1,:]         # cumsum from the bottom
+    Psi = Psi[::-1].cumsum(axis=0)[::-1]         # cumsum from the bottom
     Psi = np.vstack((Psi, np.zeros(Psi[0,:].shape))) # add a row of zeros at the bottom
     return Psi
 
@@ -141,7 +140,7 @@ def fdm3(gr, K, FQ, HI, IBOUND, axial=False):
     Out.__doc__ = """From fdm3: with fields Phi, 'Q', Qx, Qy, Qz and Q."""
 
 
-    Ny, Nx, Nz = SHP = gr.shape
+    Nz, Ny, Nx = SHP = gr.shape
     Nod = Ny * Nx * Nz
     NOD = np.arange(Nod).reshape(SHP) # generate cell numbers
 
@@ -153,7 +152,7 @@ def fdm3(gr, K, FQ, HI, IBOUND, axial=False):
     elif isinstance(K, tuple): # 3-tuple of ndarrays was given
         kx, ky, kz = K
     else:
-        raise err.InputError("", "K must be an narray of shape (Ny,Nx,Nz) or a 3tuple of ndarrays")
+        raise ValueError("", "K must be an narray of shape (Ny,Nx,Nz) or a 3tuple of ndarrays")
 
     if kx.shape != SHP:
         raise AssertionError("shape of kx {0} differs from that of model {1}".format(kx.shape, SHP))
@@ -163,9 +162,9 @@ def fdm3(gr, K, FQ, HI, IBOUND, axial=False):
         raise AssertionError("shape of kz {0} differs from that of model {1}".format(kz.shape, SHP))
 
     # from this we have the width of columns, rows and layers
-    dx = gr.dx.reshape(1,Nx,1)
-    dy = gr.dy.reshape(Ny,1,1)
-    dz = gr.dz.reshape(1,1,Nz)
+    dx = gr.dx.reshape(1, 1, Nx)
+    dy = gr.dy.reshape(1, Ny, 1)
+    dz = gr.dz.reshape(Nz, 1, 1)
 
     active = (IBOUND>0 ).reshape(Nod,)  # boolean vector denoting the active cells
     inact  = (IBOUND==0).reshape(Nod,) # boolean vector denoting inacive cells
@@ -178,12 +177,12 @@ def fdm3(gr, K, FQ, HI, IBOUND, axial=False):
         Rz  = 0.5 * dz / (dx * dy) / kz
         #half cell resistances regular grid
     else:
-        Rx2 = 1 / (2 * np.pi * kx[:,1: ,:] * dz) * np.log(gr.xm[1:]/gr.x[1:-1]).reshape((1, Nx-1, 1))
-        Rx1 = 1 / (2 * np.pi * kx[:,:-1,:] * dz) * np.log(gr.x[1:-1]/gr.xm[:-1]).reshape((1, Nx-1, 1))
-        Rx2 = np.hstack((np.Inf * np.ones((Ny,1,Nz)), Rx2))
-        Rx1 = np.hstack((Rx1, np.Inf * np.ones((Ny,1,Nz))))
+        Rx2 = 1 / (2 * np.pi * kx[:,:, 1: ] * dz) * np.log(gr.xm[ 1:]/gr.x[1:-1]).reshape((1, 1, Nx-1))
+        Rx1 = 1 / (2 * np.pi * kx[:,:, :-1] * dz) * np.log(gr.x[1:-1]/gr.xm[:-1]).reshape((1, 1, Nx-1))
+        Rx2 = np.concatenate((np.Inf * np.ones((Nz, Ny, 1)), Rx2), axis=2)
+        Rx1 = np.concatenate((Rx1, np.Inf * np.ones((Nz, Ny, 1))), axis=2)
         Ry = np.Inf * np.ones(SHP)
-        Rz = 0.5 * dz.reshape((1,1,Nz))  / (np.pi * (gr.x[1:]**2 - gr.x[:-1]**2).reshape((1,Nx,1)) * kz)
+        Rz = 0.5 * dz.reshape((Nz, 1, 1))  / (np.pi * (gr.x[1:]**2 - gr.x[:-1]**2).reshape((1, 1, Nx)) * kz)
         #half cell resistances with grid interpreted as axially symmetric
 
     # set flow resistance in inactive cells to infinite
@@ -193,17 +192,17 @@ def fdm3(gr, K, FQ, HI, IBOUND, axial=False):
     Rz  = Rz.reshape( Nod,); Rz[ inact] = np.Inf; Rz=Rz.reshape(SHP)
     #Grid resistances between nodes
 
-    Cx = 1 / (Rx1[:,:-1,:] + Rx2[:,1:,:])
-    Cy = 1 / (Ry[ :-1,:,:] + Ry[ 1:,:,:])
-    Cz = 1 / (Rz[ :,:,:-1] + Rz[ :,:,1:])
+    Cx = 1 / (Rx1[:, :,:-1] + Rx2[:, :,1:])
+    Cy = 1 / (Ry[:, :-1, :] + Ry[:, 1:, :])
+    Cz = 1 / (Rz[:-1, :, :] + Rz[:-1, :,:])
     #conductances between adjacent cells
 
-    IE = NOD[:,1:,:]  # east neighbor cell numbers
-    IW = NOD[:,:-1,:] # west neighbor cell numbers
-    IN = NOD[:-1,:,:] # north neighbor cell numbers
-    IS = NOD[1:,:,:]  # south neighbor cell numbers
-    IT = NOD[:,:,:-1] # top neighbor cell numbers
-    IB = NOD[:,:,1:]  # bottom neighbor cell numbers
+    IE = NOD[:, :, 1: ]  # east neighbor cell numbers
+    IW = NOD[:, :, :-1] # west neighbor cell numbers
+    IN = NOD[:, :-1, :] # north neighbor cell numbers
+    IS = NOD[:,  1:, :]  # south neighbor cell numbers
+    IT = NOD[:-1, :, :] # top neighbor cell numbers
+    IB = NOD[ 1:, :, :]  # bottom neighbor cell numbers
     #cell numbers for neighboors
 
     R = lambda x : x.ravel()  # shorthand for x.ravel()
@@ -242,9 +241,9 @@ def fdm3(gr, K, FQ, HI, IBOUND, axial=False):
     Phi = Phi.reshape(gr.shape)
 
     #Flows across cell faces
-    Qx =  -np.diff(Phi, axis=1) * Cx
-    Qy =  +np.diff(Phi, axis=0) * Cy
-    Qz =  +np.diff(Phi, axis=2) * Cz
+    Qx =  -np.diff(Phi, axis=2) * Cx
+    Qy =  +np.diff(Phi, axis=1) * Cy
+    Qz =  +np.diff(Phi, axis=0) * Cz
 
         # set inactive cells to NaN
     Phi[inact.reshape(gr.shape)] = np.NaN # put NaN at inactive locations
@@ -277,12 +276,12 @@ def example_Mazure():
     K = gr.const([k1/2., k2]) # k1 = 0.5 d/c because conductance from layer center
     FQ = gr.const(0) # prescribed flows
     s0 = 2.0 # head in aquifer at x=0
-    IH = gr.const(0); IH[:,0,-1] = s0 # prescribed heads
-    IBOUND = gr.const(1); IBOUND[:,:,0] = -1; IBOUND[:,0,-1]=-1
+    IH = gr.const(0); IH[-1, :, 0] = s0 # prescribed heads
+    IBOUND = gr.const(1); IBOUND[0, :, :] = -1; IBOUND[-1, :, 0]=-1
     Out = fdm3(gr, K, FQ, IH, IBOUND) # compute heads, run model
     plt.figure()
     plt.setp(plt.gca(), 'xlabel','x [m]', 'ylabel', 'head [m]', 'title', 'Mazure 1D flow')
-    plt.plot(gr.xm, Out.Phi[0,:,-1], 'ro-', label='fdm3') # numeric solution
+    plt.plot(gr.xm, Out.Phi[-1, 0 ,:], 'ro-', label='fdm3') # numeric solution
     plt.plot(gr.x, s0 * np.exp(-gr.x / lam),'bx-', label='analytic') # analytic solution
     plt.legend()
 
@@ -316,16 +315,16 @@ def example_De_Glee():
     z = np.array([0, -d, -d-D]) # m, elevation of tops and bottoms of model layers
     gr = mfgrid.Grid(r, y, z, axial=True) # generate grid
     FQ = gr.const(0.)
-    FQ[0,0,-1] = Q # m3/d fixed flows
+    FQ[-1, 0, 0] = Q # m3/d fixed flows
     IH = gr.const(0.) # m, initial heads
     IBOUND = gr.const(1)
-    IBOUND[:,:,0] = -1 # modflow like boundary array
+    IBOUND[0, :, :] = -1 # modflow like boundary array
     K = gr.const([k1/2., k2]) # full 3D array of conductivities
     Out = fdm3(gr, K, FQ, IH, IBOUND) # run model
     plt.figure()
     plt.setp(plt.gca(), 'xlabel', 'r [m]', 'ylabel', 'head [m]',\
              'title', 'De Glee, well extraction, axially symmetric', 'xscale', 'log', 'xlim', [1.0, R])
-    plt.plot(gr.xm, Out.Phi[0,:,-1], 'ro-', label='fdm3')
+    plt.plot(gr.xm, Out.Phi[-1, 0, :], 'ro-', label='fdm3')
     plt.plot(gr.x, Q/(2 * np.pi * kD) * K0(gr.x / lam) / (r0/ lam * K1(r0/ lam)), 'bx-',label='analytic')
     plt.legend()
 

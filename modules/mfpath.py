@@ -63,12 +63,12 @@ def isSink(Q, Qx, Qy, Qz, sinkfrac=0.75, tol=1e-4):
     @TO 16106
     """
     Qinto = np.zeros(Q.shape)
-    Qinto[:, 1:,:] +=  Qx * (Qx>0)
-    Qinto[:,:-1,:] += -Qx * (Qx<0)
-    Qinto[ 1:,:,:] += -Qy * (Qy<0)
-    Qinto[:-1,:,:] +=  Qy * (Qy>0)
-    Qinto[:,:, 1:] += -Qz * (Qz<0)
-    Qinto[:,:,:-1] +=  Qz * (Qz>0)
+    Qinto[:, :,  1:] +=  Qx * (Qx>0)
+    Qinto[:, :, :-1] += -Qx * (Qx<0)
+    Qinto[:,  1:, :] += -Qy * (Qy<0)
+    Qinto[:, :-1, :] +=  Qy * (Qy>0)
+    Qinto[ 1:, :, :] += -Qz * (Qz<0)
+    Qinto[:-1, :, :] +=  Qz * (Qz>0)
 
     return -Q * (Q<0) /(tol + Qinto) > sinkfrac
 
@@ -120,7 +120,7 @@ def plot_particles(Pcl, axes=None, first_axis='z',
           yy=Z
         else:
           print("first_axis must be one of ('z', 'y', 'x')")
-          raise err.InputError('',"first_axis must be one of ('z', 'y', 'x')")
+          raise ValueError('',"first_axis must be one of ('z', 'y', 'x')")
 
         Nm = len(markers)
         #pdb.set_trace()
@@ -409,7 +409,7 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
     CAPTURED = -1
     OUT = -2
 
-    Nv, Nu, Nw = gr.shape
+    Nw, Nv, Nu = gr.shape
 
     # For rounding near edges and telling whether v = constant
     digits = int(abs(np.log10(tol)))
@@ -418,33 +418,33 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
 
     # Assert correct shapes of input arrays:
     if Q.shape != gr.shape:
-        raise err.InputError("","Shape of Q {0} must equal {1}".
-                             format(repr(Q.shape), repr((Nv, Nu, Nw)))
+        raise ValueError("","Shape of Q {0} must equal {1}".
+                             format(repr(Q.shape), repr((Nw, Nv, Nu)))
                              )
-    if Qx.shape != (Nv, Nu-1, Nw):
-        raise err.InputError("","Shape of Qx {0} must equal {1}".
-                             format(repr(Qz.shape), repr((Nv, Nu-1, Nw)))\
+    if Qx.shape != (Nw, Nv, Nu-1):
+        raise ValueError("","Shape of Qx {0} must equal {1}".
+                             format(repr(Qz.shape), repr((Nw, Nv, Nu-1)))\
                             )
-    if Qy.shape != (Nv-1, Nu, Nw):
-        raise err.InputError("","Shape of Qy {0} must equal {1}".
-                             format(repr(Qy.shape), repr((Nv-1, Nu, Nw)))
+    if Qy.shape != (Nw, Nv-1, Nu):
+        raise ValueError("","Shape of Qy {0} must equal {1}".
+                             format(repr(Qy.shape), repr((Nw, Nv-1, Nu)))
                             )
-    if Qz.shape != (Nv, Nu, Nw-1):
-        raise err.InputError("","shape of Qz {0} must equals {1}".
-                             format(repr(Qz.shape), repr((Nv, Nu, Nw-1)))
+    if Qz.shape != (Nw-1, Nv, Nu):
+        raise ValueError("","shape of Qz {0} must equals {1}".
+                             format(repr(Qz.shape), repr((Nw-1, Nv, Nu)))
                             )
     por = np.array(por)
-    if por.shape != (Nv, Nu, Nw):
-        raise err.InputError("","shape of por {0} must equal {1}".
-                             format(repr(por.shape), repr((Nv, Nu, Nw)))
+    if por.shape != (Nw, Nv, Nu):
+        raise ValueError("","shape of por {0} must equal {1}".
+                             format(repr(por.shape), repr((Nw, Nv, Nu)))
                             )
 
     if particles is None:
-        raise err.InputError("",
+        raise ValueError("",
             "Interactive particle input not yet implemented, use array of Npx3 x,y,z points")
     if isinstance(particles, np.ndarray):
         if particles.shape[1] != 2 and particles.shape[1] != 3:
-            raise err.InputError("","A particle array must have shape (Np, 2) or (Np, 3),\n\
+            raise ValueError("","A particle array must have shape (Np, 2) or (Np, 3),\n\
                     that is: [Xp, Zp] or [Xp, Yp, Zp]")
         if particles.shape[1] == 2:
             # Assume x and z are given, add zeros for y
@@ -458,7 +458,7 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
             particles = np.hstack((particles[:,0], np.zeros(particles[:,0].shape), particles[:,-1]))
     elif isinstance(particles, (tuple, list)):
         if not (len(particles) == 2 or len(particles) == 3):
-            raise err.InputError("","A particles tuple or list must consist of (Xp, Zp) or (Xp, Yp, Zp)")
+            raise ValueError("","A particles tuple or list must consist of (Xp, Zp) or (Xp, Yp, Zp)")
         if len(particles) == 2:
             Xp = particles[0]
             Yp = np.zeros(Xp.shape)
@@ -468,10 +468,10 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
             Yp = particles[1]
             Zp = particles[2]
     else:
-        raise err.IntputError("","Particles must be an ndarray, a tuple or a list\n\
+        raise ValueError("","Particles must be an ndarray, a tuple or a list\n\
             holding [Xp,Zp] or [Xp,Yp,Zp] particle coordinates")
     if len(Xp) != len(Yp) or len(Xp) != len(Zp):
-        raise err.InputError("",
+        raise ValueError("",
                     "length of particle coordinates Xp, Yp, and Zp must be the same.")
 
     # check for NaNs in intput coordinates
@@ -505,12 +505,12 @@ def particle_tracker(gr, fdm_out, por, T=100., particles=None,
     # Set velocities at cell faces and  ...
     #   take sign of Q into consideration (to align
     #   v with ascending axies in normalized grid
-    vc_u0[:, 1:,:] = np.round( Qx * forward / Vcells[:, 1:,:], decimals=digits)
-    vc_u1[:,:-1,:] = np.round( Qx * forward / Vcells[:,:-1,:], decimals=digits)
-    vc_v0[ 1:,:,:] = np.round(-Qy * forward / Vcells[ 1:,:,:], decimals=digits)
-    vc_v1[:-1,:,:] = np.round(-Qy * forward / Vcells[:-1,:,:], decimals=digits)
-    vc_w0[:,:, 1:] = np.round(-Qz * forward / Vcells[:,:, 1:], decimals=digits)
-    vc_w1[:,:,:-1] = np.round(-Qz * forward / Vcells[:,:,:-1], decimals=digits)
+    vc_u0[:, :,  1:] = np.round( Qx * forward / Vcells[:, :,  1:], decimals=digits)
+    vc_u1[:, :, :-1] = np.round( Qx * forward / Vcells[:, :, :-1], decimals=digits)
+    vc_v0[:,  1:, :] = np.round(-Qy * forward / Vcells[:,  1:, :], decimals=digits)
+    vc_v1[:, :-1, :] = np.round(-Qy * forward / Vcells[:, :-1, :], decimals=digits)
+    vc_w0[ 1:, :, :] = np.round(-Qz * forward / Vcells[ 1:, :, :], decimals=digits)
+    vc_w1[:-1, :, :] = np.round(-Qz * forward / Vcells[-1:, :, :], decimals=digits)
 
     # Only vectors needed for effecive indexiing
     vc_u0 = vc_u0.ravel()
@@ -840,8 +840,8 @@ def normGrid(gr):
 
 def travel_time_x(gr, x, phi, k, por, R=1.):
     # T = L1 L eps R / (k dh)
-    h0 = np.mean(phi[:, 0,:])
-    h1 = np.mean(phi[:,-1,:])
+    h0 = np.mean(phi[:, :, 0])
+    h1 = np.mean(phi[:, :,-1])
     L  = gr.xm[-1] - gr.xm[0]
     i  = (h0-h1)/L
     if i>0:
@@ -852,8 +852,8 @@ def travel_time_x(gr, x, phi, k, por, R=1.):
 
 def travel_time_y(gr, y, phi, k, por, R=1.):
     # T = L1 L eps R / (k dh)
-    h0 = np.mean(phi[-1,:,:])
-    h1 = np.mean(phi[ 0,:,:])
+    h0 = np.mean(phi[:, -1, :])
+    h1 = np.mean(phi[:,  0, :])
     L  = gr.ym[0] - gr.ym[-1]
     i  = (h0 -h1) / L
     if i>0:
@@ -865,8 +865,8 @@ def travel_time_y(gr, y, phi, k, por, R=1.):
 def travel_time_z(gr, z, phi, k, por, R=1.):
     # T = L1 L eps R / (k dh)
     if gr.full == False:
-        h0 = np.mean(phi[:,:,-1])
-        h1 = np.mean(phi[:,:, 0])
+        h0 = np.mean(phi[-1, :, :])
+        h1 = np.mean(phi[ 0, :, :])
         L   = gr.zm[0] - gr.zm[-1]
         i   = (h0 - h1) / L
         if i>0:
@@ -969,15 +969,15 @@ if __name__ == '__main__':
     T = np.arange(0., 36000., 360.)
 
     peff = gr.const(0.35)
+    pdb.set_trace()
 
     # Track particles
-    Pcl = particle_tracker(gr, fdm_out, T, (xp, yp, zp))
+    Pcl = particle_tracker(gr, fdm_out, peff, T, (xp, yp, zp))
 
 
-    visualize(gr, Pcl, ugrid=False, phi=fdm_out.Phi[:,:,0])
+    visualize(gr, Pcl, ugrid=False, phi=fdm_out.Phi[0])
     visualize(gr, Pcl, ugrid=True)
 
     print('Finished')
-    pdb.set_trace()
 
     # -- plot a 3D network and the partciles in it

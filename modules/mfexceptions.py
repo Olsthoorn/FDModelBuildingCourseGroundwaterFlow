@@ -6,12 +6,16 @@ Created on Fri Sep 30 04:12:02 2016
 @author: Theo
 """
 
-class InputError(BaseException):
+class InputError(Exception):
     """Exception raised for errors in the input.
+    """
+    pass
+    #def __init__(self, expression, message):
+    #    self.expression = expression
+    #    self.message = message
 
-    Attributes:
-        expression -- input expression in which the error occurred
-        message -- explanation of the error
+class ShapeError(Exception):
+    """Exception raised then shapes don't match.
     """
     pass
     #def __init__(self, expression, message):

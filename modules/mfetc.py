@@ -55,6 +55,34 @@ def display(*args, fmt='10.3g'):
     prarr(np.vstack(A).T, N=len(A), fmt=fmt)
 
 
+def prar(A, name='var', tabs=False, ncol=10):
+    """print ndarray matlab like.
+    If A is string, prints name of array before the array.
+    Otherwise, prints (?) as array name.
+    """
+
+    if isinstance(A, np.matrix):   A = A.copy()
+
+    if len(A.shape)==1:  A = [A]
+
+    A = np.array(A)
+
+    m, n = A.shape
+
+    K = int(np.ceil(A.shape[1]/ncol))
+
+    fmt="\t{:4g}" if tabs else " {:9.4g}"
+
+    for k in range(K):
+        fr = ncol * k;
+        to =  min(ncol*(k+1), n)
+
+        print("\n{}[:, {}:{}]=\n".format(name, fr, to))
+        for r in A:
+            print((fmt * len(r[fr:to])).format(*r[fr:to]))
+        print()
+
+
 def prarr(A, N=8, fmt='10.4g'):
     """matlab like 1D, 2D and 3D array Printer
 
@@ -81,6 +109,7 @@ def prarr(A, N=8, fmt='10.4g'):
             prarr2(A[:,:,iL], N, fmt, prefix)
     else:
         prarr2(A, N, fmt, "") # regular 2D print
+
 
 
 def prarr2(A, ncol=8, fmt='10.4g', prefix='', decimals=7):
